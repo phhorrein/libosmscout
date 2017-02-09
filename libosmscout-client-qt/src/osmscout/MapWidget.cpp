@@ -23,6 +23,7 @@
 
 #include <osmscout/MapWidget.h>
 #include <osmscout/InputHandler.h>
+#include <osmscout/RoutingModel.h>
 
 #define TMP_SUFFIX ".tmp"
 
@@ -33,7 +34,9 @@ MapWidget::MapWidget(QQuickItem* parent)
     : QQuickPaintedItem(parent),
       inputHandler(NULL), 
       showCurrentPosition(false),
-      finished(false)
+      finished(false),
+      currentNodeId(0),
+      currentWayId(0)
 {
     setOpaquePainting(true);
     setAcceptedMouseButtons(Qt::LeftButton);
@@ -262,7 +265,37 @@ void MapWidget::paint(QPainter *painter)
         }
     }
     
+    // render nodes
+    if (!nodes.isEmpty()) {
+        osmscout::MercatorProjection projection = getProjection();
+        
+        double x;
+        double y;
+        painter->setBrush(QBrush());
+        QPen pen;
+        
+        for (auto &node: nodes){
+            MapWidget::NodesType type = node.type;
+            osmscout::GeoCoord coords = node.coords;
+
+            // TODO: use a Map for configuration
+            if (type == PositionNode) {
+                pen.setColor(QColor::fromRgbF(0.8, 0.0, 0.0, 0.9));
+            } else {
+                pen.setColor(QColor::fromRgbF(0.0, 0.8, 0.0, 0.9));
+            }
+            pen.setWidth(6);
+            painter->setPen(pen);
+            projection.GeoToPixel(coords, x, y);
+            if (boundingBox.contains(x, y)){
+                // TODO: take DPI into account
+                // TODO: set a configurable basic form
+                painter->drawEllipse(x - 20, y - 20, 40, 40);
+            }
+        }
+    }
     // render marks
+    // We keep the mark interface for compatibility
     if (!marks.isEmpty()){
         osmscout::MercatorProjection projection = getProjection();
         
@@ -279,6 +312,36 @@ void MapWidget::paint(QPainter *painter)
             if (boundingBox.contains(x, y)){
                 // TODO: take DPI into account
                 painter->drawEllipse(x - 20, y - 20, 40, 40);
+            }
+        }
+    }
+
+    // render ways
+    if (!ways.isEmpty()) {
+        osmscout::MercatorProjection projection = getProjection();
+        painter->setBrush(QBrush());
+        QPen pen;
+
+        for (auto &entry: ways) {
+            osmscout::WayRef way = entry.way;
+            MapWidget::WaysType type = entry.type;
+            std::vector<osmscout::Point> nodes = way->nodes;
+            if (!nodes.empty()) {
+                pen.setColor(QColor::fromRgbF(0.8, 0.0, 0.0, 0.9));
+                pen.setWidth(6);
+                painter->setPen(pen);
+                osmscout::GeoCoord start = way->GetCoord(0),end;
+                double x_start, y_start;
+                projection.GeoToPixel(start, x_start, y_start);
+                double x_end, y_end;
+                for (unsigned int i = 1; i < nodes.size(); i++) {
+                    end = way->GetCoord(i);
+                    projection.GeoToPixel(end, x_end, y_end);
+                    painter->drawLine(x_start, y_start, x_end, y_end);
+                    start = end;
+                    x_start = x_end;
+                    y_start = y_end;
+                }
             }
         }
     }
@@ -520,6 +583,48 @@ void MapWidget::locationChanged(bool locationValid, double lat, double lon, bool
     inputHandler->currentPosition(locationValid, currentPosition);
 
     redraw();
+}
+
+int MapWidget::addWay(RoutingListModel *routeModel, MapWidget::WaysType type)
+{
+    WayDescription newWay;
+    newWay.way = routeModel->getWay();
+    newWay.type = type;
+    ways.insert(currentWayId, newWay);
+    update();
+    return currentWayId++;
+}
+// TODO: shared ptr  WayRef
+int MapWidget::addWay(osmscout::WayRef way, MapWidget::WaysType type)
+{
+    WayDescription newWay;
+    newWay.way = way;
+    newWay.type = type;
+    ways.insert(currentWayId, newWay);
+    update();
+    return currentWayId++;
+}
+
+void MapWidget::removeWay(int id)
+{
+    ways.remove(id);
+    update();
+}
+
+int MapWidget::addNode(double lat, double lon, MapWidget::NodesType type) 
+{
+    NodeDescription node;
+    node.coords = osmscout::GeoCoord(lat,lon);
+    node.type = type;
+    nodes.insert(currentNodeId,node);
+    update();
+    return currentNodeId++;
+}
+
+void MapWidget::removeNode(int id) 
+{
+    nodes.remove(id);
+    update();
 }
 
 void MapWidget::addPositionMark(int id, double lat, double lon)

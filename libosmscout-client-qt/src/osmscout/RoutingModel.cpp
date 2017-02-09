@@ -394,6 +394,10 @@ void RoutingListModel::DumpNameChangedDescription(const osmscout::RouteDescripti
   route.routeSteps.push_back(changed);
 }
 
+osmscout::WayRef RoutingListModel::getWay()
+{
+    return std::make_shared<osmscout::Way>(routeWay);
+}
 void RoutingListModel::setStartAndTarget(LocationEntry* start,
                                          LocationEntry* target)
 {
@@ -422,7 +426,6 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
     return;    
   }
   osmscout::FastestPathRoutingProfile routingProfile(typeConfig);
-  osmscout::Way                       routeWay;
   osmscout::Vehicle                   vehicle=osmscout::vehicleCar;//settings->GetRoutingVehicle();
 
   if (vehicle==osmscout::vehicleFoot) {
