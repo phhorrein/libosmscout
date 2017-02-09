@@ -30,7 +30,9 @@
 
 #include <osmscout/DBThread.h>
 #include <osmscout/SearchLocationModel.h>
+#include <osmscout/RoutingModel.h>
 #include <osmscout/InputHandler.h>
+#include <osmscout/Way.h>
 
 /**
  * \defgroup QtAPI Qt API
@@ -50,6 +52,8 @@
 class OSMSCOUT_CLIENT_QT_API MapWidget : public QQuickPaintedItem
 {
   Q_OBJECT
+  Q_ENUMS(NodesType)
+  Q_ENUMS(WaysType)
   Q_PROPERTY(QObject  *view    READ GetView     WRITE SetMapView  NOTIFY viewChanged)
   Q_PROPERTY(double   lat      READ GetLat      NOTIFY viewChanged)
   Q_PROPERTY(double   lon      READ GetLon      NOTIFY viewChanged)
@@ -67,6 +71,18 @@ class OSMSCOUT_CLIENT_QT_API MapWidget : public QQuickPaintedItem
   Q_PROPERTY(int stylesheetErrorColumn          READ firstStylesheetErrorColumn       NOTIFY styleErrorsChanged)
   Q_PROPERTY(QString stylesheetErrorDescription READ firstStylesheetErrorDescription  NOTIFY styleErrorsChanged)  
 
+public:
+  enum NodesType {
+      WayPointNode,
+      EndPointNode,
+      PositionNode,
+  };
+
+  enum WaysType {
+      RouteWay,
+  };
+
+
 private:
 
   MapView          *view;
@@ -82,8 +98,23 @@ private:
   osmscout::GeoCoord currentPosition;
   bool horizontalAccuracyValid;
   double horizontalAccuracy;
+
+  struct NodeDescription {
+      osmscout::GeoCoord coords;
+      NodesType type;
+  };
+
+  struct WayDescription {
+      osmscout::WayRef way;
+      WaysType type;
+  };
+
   
   QMap<int, osmscout::GeoCoord> marks;
+  QMap<int, NodeDescription> nodes;
+  QMap<int, WayDescription> ways;
+  int currentNodeId;
+  int currentWayId;
 
 signals:
   void viewChanged();
@@ -135,6 +166,13 @@ public slots:
   
   void addPositionMark(int id, double lat, double lon);
   void removePositionMark(int id);
+
+  int addNode(double lat, double lon, MapWidget::NodesType);
+  void removeNode(int id);
+
+  int addWay(osmscout::WayRef way, MapWidget::WaysType);
+  int addWay(RoutingListModel *routeModel, MapWidget::WaysType);
+  void removeWay(int id);
 
   bool toggleDebug();
   bool toggleInfo();

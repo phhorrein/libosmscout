@@ -97,6 +97,8 @@ public slots:
                            LocationEntry* target);
     void clear();
 
+    osmscout::WayRef getWay();
+
 private:
     struct RouteSelection
     {
@@ -106,6 +108,7 @@ private:
     };
 
     RouteSelection route;
+    osmscout::Way routeWay;
 
 public:
     enum Roles {
