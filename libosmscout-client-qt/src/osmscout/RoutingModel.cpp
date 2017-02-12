@@ -1,21 +1,21 @@
 /*
- OSMScout - a Qt backend for libosmscout and libosmscout-map
- Copyright (C) 2010  Tim Teulings
+   OSMScout - a Qt backend for libosmscout and libosmscout-map
+   Copyright (C) 2010  Tim Teulings
 
-  This library is free software; you can redistribute it and/or
-  modify it under the terms of the GNU Lesser General Public
-  License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 2.1 of the License, or (at your option) any later version.
 
-  This library is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-  Lesser General Public License for more details.
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
 
-  You should have received a copy of the GNU Lesser General Public
-  License along with this library; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
- */
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
+   */
 
 
 #include <iostream>
@@ -24,6 +24,7 @@
 
 #include <osmscout/system/Math.h>
 #include <osmscout/RoutingModel.h>
+#include <osmscout/DBThread.h>
 
 static QString DistanceToString(double distance)
 {
@@ -54,20 +55,20 @@ static QString TimeToString(double time)
 static QString MoveToTurnCommand(osmscout::RouteDescription::DirectionDescription::Move move)
 {
   switch (move) {
-  case osmscout::RouteDescription::DirectionDescription::sharpLeft:
-    return "Turn sharp left";
-  case osmscout::RouteDescription::DirectionDescription::left:
-    return "Turn left";
-  case osmscout::RouteDescription::DirectionDescription::slightlyLeft:
-    return "Turn slightly left";
-  case osmscout::RouteDescription::DirectionDescription::straightOn:
-    return "Straight on";
-  case osmscout::RouteDescription::DirectionDescription::slightlyRight:
-    return "Turn slightly right";
-  case osmscout::RouteDescription::DirectionDescription::right:
-    return "Turn right";
-  case osmscout::RouteDescription::DirectionDescription::sharpRight:
-    return "Turn sharp right";
+    case osmscout::RouteDescription::DirectionDescription::sharpLeft:
+      return "Turn sharp left";
+    case osmscout::RouteDescription::DirectionDescription::left:
+      return "Turn left";
+    case osmscout::RouteDescription::DirectionDescription::slightlyLeft:
+      return "Turn slightly left";
+    case osmscout::RouteDescription::DirectionDescription::straightOn:
+      return "Straight on";
+    case osmscout::RouteDescription::DirectionDescription::slightlyRight:
+      return "Turn slightly right";
+    case osmscout::RouteDescription::DirectionDescription::right:
+      return "Turn right";
+    case osmscout::RouteDescription::DirectionDescription::sharpRight:
+      return "Turn sharp right";
   }
 
   assert(false);
@@ -114,10 +115,10 @@ static std::string CrossingWaysDescriptionToString(const osmscout::RouteDescript
     for (std::set<std::string>::const_iterator name=names.begin();
         name!=names.end();
         ++name) {
-        /*
-      if (name!=names.begin()) {
-        stream << ", ";
-      }*/
+      /*
+         if (name!=names.begin()) {
+         stream << ", ";
+         }*/
       stream << "<li>'" << *name << "'</li>";
     }
     stream << "</ul>";
@@ -135,39 +136,54 @@ RouteStep::RouteStep()
 }
 
 RouteStep::RouteStep(const RouteStep& other)
-    : QObject(other.parent()),
-      distance(other.distance),
-      distanceDelta(other.distanceDelta),
-      time(other.time),
-      timeDelta(other.timeDelta),
-      description(other.description)
+  : QObject(other.parent()),
+  distance(other.distance),
+  distanceDelta(other.distanceDelta),
+  time(other.time),
+  timeDelta(other.timeDelta),
+  description(other.description)
 {
-    // no code
+  // no code
 }
 
 RoutingListModel::RoutingListModel(QObject* parent)
-: QAbstractListModel(parent)
+  : QAbstractListModel(parent),
+  routeRequestId(0),
+  routeValid(false)
 {
-    // no code
+  DBThread *dbThread = DBThread::GetInstance();
+
+  qRegisterMetaType<RouteComputeRequest>("RouteComputeRequest");
+  qRegisterMetaType<osmscout::RouteData>("osmscout::RouteData");
+
+  connect(this, SIGNAL(requestRouteComputation(const RouteComputeRequest&, QObject *, unsigned int)), 
+      dbThread, SLOT(onRequestRouteComputation(const RouteComputeRequest&, QObject *, unsigned int)),
+      Qt::QueuedConnection);
+
+
+  connect(dbThread, SIGNAL(routeComputationFinished(const RouteComputeRequest&, QObject *, unsigned int, bool, const osmscout::RouteData& )), 
+          this, SLOT(onRouteComputationFinished(const RouteComputeRequest&, QObject *, unsigned int, bool, const osmscout::RouteData& )),
+      Qt::QueuedConnection);
+
 }
 
 RouteStep& RouteStep::operator=(const RouteStep& other)
 {
-    if (this!=&other) {
-      setParent(other.parent());
-      distance=other.distance;
-      distanceDelta=other.distanceDelta;
-      time=other.time;
-      timeDelta=other.timeDelta;
-      description=other.description;
-    }
+  if (this!=&other) {
+    setParent(other.parent());
+    distance=other.distance;
+    distanceDelta=other.distanceDelta;
+    time=other.time;
+    timeDelta=other.timeDelta;
+    description=other.description;
+  }
 
-    return *this;
+  return *this;
 }
 
 RoutingListModel::~RoutingListModel()
 {
-    route.routeSteps.clear();
+  route.routeSteps.clear();
 }
 
 void RoutingListModel::GetCarSpeedTable(std::map<std::string,double>& map)
@@ -194,7 +210,7 @@ void RoutingListModel::GetCarSpeedTable(std::map<std::string,double>& map)
 }
 
 void RoutingListModel::DumpStartDescription(const osmscout::RouteDescription::StartDescriptionRef& startDescription,
-                                            const osmscout::RouteDescription::NameDescriptionRef& nameDescription)
+    const osmscout::RouteDescription::NameDescriptionRef& nameDescription)
 {
   RouteStep startAt;
 
@@ -219,9 +235,9 @@ void RoutingListModel::DumpTargetDescription(const osmscout::RouteDescription::T
 }
 
 void RoutingListModel::DumpTurnDescription(const osmscout::RouteDescription::TurnDescriptionRef& /*turnDescription*/,
-                                           const osmscout::RouteDescription::CrossingWaysDescriptionRef& crossingWaysDescription,
-                                           const osmscout::RouteDescription::DirectionDescriptionRef& directionDescription,
-                                           const osmscout::RouteDescription::NameDescriptionRef& nameDescription)
+    const osmscout::RouteDescription::CrossingWaysDescriptionRef& crossingWaysDescription,
+    const osmscout::RouteDescription::DirectionDescriptionRef& directionDescription,
+    const osmscout::RouteDescription::NameDescriptionRef& nameDescription)
 {
   RouteStep   turn;
   std::string crossingWaysString;
@@ -250,7 +266,7 @@ void RoutingListModel::DumpTurnDescription(const osmscout::RouteDescription::Tur
 }
 
 void RoutingListModel::DumpRoundaboutEnterDescription(const osmscout::RouteDescription::RoundaboutEnterDescriptionRef& /*roundaboutEnterDescription*/,
-                                                      const osmscout::RouteDescription::CrossingWaysDescriptionRef& crossingWaysDescription)
+    const osmscout::RouteDescription::CrossingWaysDescriptionRef& crossingWaysDescription)
 {
   RouteStep   enter;
   std::string crossingWaysString;
@@ -270,7 +286,7 @@ void RoutingListModel::DumpRoundaboutEnterDescription(const osmscout::RouteDescr
 }
 
 void RoutingListModel::DumpRoundaboutLeaveDescription(const osmscout::RouteDescription::RoundaboutLeaveDescriptionRef& roundaboutLeaveDescription,
-                                                      const osmscout::RouteDescription::NameDescriptionRef& nameDescription)
+    const osmscout::RouteDescription::NameDescriptionRef& nameDescription)
 {
   RouteStep leave;
 
@@ -289,7 +305,7 @@ void RoutingListModel::DumpRoundaboutLeaveDescription(const osmscout::RouteDescr
 }
 
 void RoutingListModel::DumpMotorwayEnterDescription(const osmscout::RouteDescription::MotorwayEnterDescriptionRef& motorwayEnterDescription,
-                                                    const osmscout::RouteDescription::CrossingWaysDescriptionRef& crossingWaysDescription)
+    const osmscout::RouteDescription::CrossingWaysDescriptionRef& crossingWaysDescription)
 {
   RouteStep   enter;
   std::string crossingWaysString;
@@ -338,8 +354,8 @@ void RoutingListModel::DumpMotorwayChangeDescription(const osmscout::RouteDescri
 }
 
 void RoutingListModel::DumpMotorwayLeaveDescription(const osmscout::RouteDescription::MotorwayLeaveDescriptionRef& motorwayLeaveDescription,
-                                                    const osmscout::RouteDescription::DirectionDescriptionRef& directionDescription,
-                                                    const osmscout::RouteDescription::NameDescriptionRef& nameDescription)
+    const osmscout::RouteDescription::DirectionDescriptionRef& directionDescription,
+    const osmscout::RouteDescription::NameDescriptionRef& nameDescription)
 {
   RouteStep leave;
 
@@ -396,10 +412,10 @@ void RoutingListModel::DumpNameChangedDescription(const osmscout::RouteDescripti
 
 osmscout::WayRef RoutingListModel::getWay()
 {
-    return std::make_shared<osmscout::Way>(routeWay);
+  return std::make_shared<osmscout::Way>(routeWay);
 }
 void RoutingListModel::setStartAndTarget(LocationEntry* start,
-                                         LocationEntry* target)
+    LocationEntry* target)
 {
   std::cout << "Routing from '" << start->getLabel().toLocal8Bit().data() << "' to '" << target->getLabel().toLocal8Bit().data() << "'" << std::endl;
 
@@ -415,10 +431,12 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
     qWarning() << "Target database:" << target->getDatabase();
     return;
   }
-  
+
+  routeValid = false;
+  emit routeValidChanged();
   beginResetModel();
   route.routeSteps.clear();
-  
+
   QString                             databasePath=start->getDatabase();
   osmscout::TypeConfigRef             typeConfig=DBThread::GetInstance()->GetTypeConfig(databasePath);
   if (!typeConfig){
@@ -426,15 +444,15 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
     return;    
   }
   osmscout::FastestPathRoutingProfile routingProfile(typeConfig);
-  osmscout::Vehicle                   vehicle=osmscout::vehicleCar;//settings->GetRoutingVehicle();
+  routerParams.vehicle=osmscout::vehicleCar;//settings->GetRoutingVehicle();
 
-  if (vehicle==osmscout::vehicleFoot) {
+  if (routerParams.vehicle==osmscout::vehicleFoot) {
     routingProfile.ParametrizeForFoot(*typeConfig,
-                                      5.0);
+        5.0);
   }
-  else if (vehicle==osmscout::vehicleBicycle) {
+  else if (routerParams.vehicle==osmscout::vehicleBicycle) {
     routingProfile.ParametrizeForBicycle(*typeConfig,
-                                         20.0);
+        20.0);
   }
   else /* car */ {
     std::map<std::string,double> speedMap;
@@ -442,14 +460,14 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
     GetCarSpeedTable(speedMap);
 
     routingProfile.ParametrizeForCar(*typeConfig,
-                                     speedMap,
-                                     160.0);
+        speedMap,
+        160.0);
   }
 
   osmscout::RoutePosition startPosition=DBThread::GetInstance()->GetClosestRoutableNode(databasePath,
-                                                                                        start->getReferences().front(),
-                                                                                        routingProfile,
-                                                                                        1000);
+      start->getReferences().front(),
+      routingProfile,
+      1000);
 
   if (!startPosition.IsValid()) {
     std::cerr << "Cannot find a routing node close to the start location" << std::endl;
@@ -457,9 +475,9 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
   }
 
   osmscout::RoutePosition targetPosition=DBThread::GetInstance()->GetClosestRoutableNode(databasePath,
-                                                                                         target->getReferences().front(),
-                                                                                         routingProfile,
-                                                                                         1000);
+      target->getReferences().front(),
+      routingProfile,
+      1000);
 
   if (!targetPosition.IsValid()) {
     std::cerr << "Cannot find a routing node close to the target location" << std::endl;
@@ -467,23 +485,46 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
     return;
   }
 
-  if (!DBThread::GetInstance()->CalculateRoute(databasePath,
-                                               routingProfile,
-                                               startPosition,
-                                               targetPosition,
-                                               route.routeData)) {
-    std::cerr << "There was an error while routing!" << std::endl;
+  routerParams.databasePath = databasePath;
+  routerParams.routeStart = start;
+  routerParams.routeEnd = target;
+  routerParams.routeEndPosition = targetPosition;
+  routerParams.routeStartPosition = startPosition;
+  osmscout::FastestPathRoutingProfileRef routingProfileRef = std::make_shared<osmscout::FastestPathRoutingProfile>(routingProfile);
+  routerParams.profile = routingProfileRef;
+  computing = true;
+  emit computingChanged();
+  qDebug() << "Sending signal";
+  emit requestRouteComputation(routerParams,this,++routeRequestId);
+}
+
+void RoutingListModel::onRouteComputationFinished(
+    const RouteComputeRequest& routerParams,
+    QObject *requester,
+    unsigned int id,
+    bool routeFound,
+    const osmscout::RouteData &routeData)
+{
+  if ((!computing) || (requester != this) || (id != routeRequestId)) {
+    qDebug() << "Not the current request";
     return;
   }
-
+  if (!routeFound) {
+    qDebug() << "No route found";
+    computing = false;
+    emit computingChanged();
+    return;
+  }
+  
   std::cout << "Route calculated" << std::endl;
+  route.routeData = routeData;
 
-  DBThread::GetInstance()->TransformRouteDataToRouteDescription(databasePath,
-                                                                routingProfile,
-                                                                route.routeData,
-                                                                route.routeDescription,
-                                                                start->getLabel().toUtf8().constData(),
-                                                                target->getLabel().toUtf8().constData());
+  DBThread::GetInstance()->TransformRouteDataToRouteDescription(routerParams.databasePath,
+      *routerParams.profile,
+      route.routeData,
+      route.routeDescription,
+      routerParams.routeStart->getLabel().toUtf8().constData(),
+      routerParams.routeEnd->getLabel().toUtf8().constData());
 
   std::cout << "Route transformed" << std::endl;
 
@@ -492,8 +533,8 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
 
   std::list<osmscout::RouteDescription::Node>::const_iterator prevNode=route.routeDescription.Nodes().end();
   for (std::list<osmscout::RouteDescription::Node>::const_iterator node=route.routeDescription.Nodes().begin();
-       node!=route.routeDescription.Nodes().end();
-       ++node) {
+      node!=route.routeDescription.Nodes().end();
+      ++node) {
     osmscout::RouteDescription::DescriptionRef                 desc;
     osmscout::RouteDescription::NameDescriptionRef             nameDescription;
     osmscout::RouteDescription::DirectionDescriptionRef        directionDescription;
@@ -577,40 +618,40 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
 
     if (startDescription) {
       DumpStartDescription(startDescription,
-                           nameDescription);
+          nameDescription);
     }
     else if (targetDescription) {
       DumpTargetDescription(targetDescription);
     }
     else if (turnDescription) {
       DumpTurnDescription(turnDescription,
-                          crossingWaysDescription,
-                          directionDescription,
-                          nameDescription);
+          crossingWaysDescription,
+          directionDescription,
+          nameDescription);
     }
     else if (roundaboutEnterDescription) {
       DumpRoundaboutEnterDescription(roundaboutEnterDescription,
-                                     crossingWaysDescription);
+          crossingWaysDescription);
 
       roundaboutCrossingCounter=1;
     }
     else if (roundaboutLeaveDescription) {
       DumpRoundaboutLeaveDescription(roundaboutLeaveDescription,
-                                     nameDescription);
+          nameDescription);
 
       roundaboutCrossingCounter=0;
     }
     else if (motorwayEnterDescription) {
       DumpMotorwayEnterDescription(motorwayEnterDescription,
-                                   crossingWaysDescription);
+          crossingWaysDescription);
     }
     else if (motorwayChangeDescription) {
       DumpMotorwayChangeDescription(motorwayChangeDescription);
     }
     else if (motorwayLeaveDescription) {
       DumpMotorwayLeaveDescription(motorwayLeaveDescription,
-                                   directionDescription,
-                                   nameDescription);
+          directionDescription,
+          nameDescription);
     }
     else if (nameChangedDescription) {
       DumpNameChangedDescription(nameChangedDescription);
@@ -622,10 +663,10 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
     int currentStepIndex;
 
     if (lastStepIndex>=0) {
-        currentStepIndex=lastStepIndex+1;
+      currentStepIndex=lastStepIndex+1;
     }
     else {
-        currentStepIndex=0;
+      currentStepIndex=0;
     }
 
     if (currentStepIndex>=0) {
@@ -648,10 +689,10 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
     prevNode=node;
   }
 
-  if (DBThread::GetInstance()->TransformRouteDataToWay(databasePath,
-                                                       vehicle,
-                                                       route.routeData,
-                                                       routeWay)) {
+  if (DBThread::GetInstance()->TransformRouteDataToWay(routerParams.databasePath,
+        routerParams.vehicle,
+        route.routeData,
+        routeWay)) {
     DBThread::GetInstance()->ClearRoute();
     DBThread::GetInstance()->AddRoute(routeWay);
   }
@@ -660,6 +701,10 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
   }
 
   endResetModel();
+  routeValid = true;
+  emit routeValidChanged();
+  computing = false;
+  emit computingChanged();
 }
 
 void RoutingListModel::clear()
@@ -673,53 +718,53 @@ void RoutingListModel::clear()
 
 int RoutingListModel::rowCount(const QModelIndex& ) const
 {
-    return route.routeSteps.size();
+  return route.routeSteps.size();
 }
 
 QVariant RoutingListModel::data(const QModelIndex &index, int role) const
 {
-    if(index.row() < 0 || index.row() >= route.routeSteps.size()) {
-        return QVariant();
-    }
+  if(index.row() < 0 || index.row() >= route.routeSteps.size()) {
+    return QVariant();
+  }
 
-    RouteStep step=route.routeSteps.at(index.row());
+  RouteStep step=route.routeSteps.at(index.row());
 
-    switch (role) {
+  switch (role) {
     case Qt::DisplayRole:
     case LabelRole:
-        return step.getDescription();
+      return step.getDescription();
     default:
-        break;
-    }
+      break;
+  }
 
-    return QVariant();
+  return QVariant();
 }
 
 Qt::ItemFlags RoutingListModel::flags(const QModelIndex &index) const
 {
-    if(!index.isValid()) {
-        return Qt::ItemIsEnabled;
-    }
+  if(!index.isValid()) {
+    return Qt::ItemIsEnabled;
+  }
 
-    return QAbstractListModel::flags(index) | Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+  return QAbstractListModel::flags(index) | Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
 QHash<int, QByteArray> RoutingListModel::roleNames() const
 {
-    QHash<int, QByteArray> roles=QAbstractListModel::roleNames();
+  QHash<int, QByteArray> roles=QAbstractListModel::roleNames();
 
-    roles[LabelRole]="label";
+  roles[LabelRole]="label";
 
-    return roles;
+  return roles;
 }
 
 RouteStep* RoutingListModel::get(int row) const
 {
-    if(row < 0 || row >= route.routeSteps.size()) {
-        return NULL;
-    }
+  if(row < 0 || row >= route.routeSteps.size()) {
+    return NULL;
+  }
 
-    RouteStep step=route.routeSteps.at(row);
+  RouteStep step=route.routeSteps.at(row);
 
-    return new RouteStep(step);
+  return new RouteStep(step);
 }

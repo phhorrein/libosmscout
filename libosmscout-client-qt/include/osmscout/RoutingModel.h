@@ -91,6 +91,8 @@ class OSMSCOUT_CLIENT_QT_API RoutingListModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(int count READ rowCount)
+    Q_PROPERTY(bool routeValid READ getRouteValid NOTIFY routeValidChanged)
+    Q_PROPERTY(bool computing READ getComputing NOTIFY computingChanged)
 
 public slots:
     void setStartAndTarget(LocationEntry* start,
@@ -98,6 +100,22 @@ public slots:
     void clear();
 
     osmscout::WayRef getWay();
+private slots:
+    void onRouteComputationFinished(
+            const RouteComputeRequest &,
+            QObject *requester,
+            unsigned int id,
+            bool routeFound,
+            const osmscout::RouteData &route);
+
+signals:
+
+  void requestRouteComputation (const RouteComputeRequest&,
+      QObject *requester,
+      unsigned int id);
+
+  void routeValidChanged();
+  void computingChanged();
 
 private:
     struct RouteSelection
@@ -109,11 +127,25 @@ private:
 
     RouteSelection route;
     osmscout::Way routeWay;
+    unsigned int routeRequestId;
+
+
+    RouteComputeRequest routerParams;
+    bool routeValid;
+    bool computing;
 
 public:
     enum Roles {
         LabelRole = Qt::UserRole
     };
+
+    inline bool getRouteValid() {
+      return routeValid;
+    }
+
+    inline bool getComputing() {
+      return computing;
+    }
 
 private:
     void GetCarSpeedTable(std::map<std::string,double>& map);

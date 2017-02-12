@@ -895,10 +895,23 @@ void DBThread::requestObjectsOnView(const RenderMapRequest &view)
   }
 }
 
-bool DBThread::CalculateRoute(const QString databasePath,
+void DBThread::onRequestRouteComputation ( const RouteComputeRequest& routerParams,
+    QObject *requester,
+    unsigned int id)
+{
+  QTime timer;
+  osmscout::RouteData route;
+  qDebug() << "Launching computation ";
+  timer.start();
+  bool res = CalculateRoute(routerParams.databasePath, *(routerParams.profile), routerParams.routeStartPosition, routerParams.routeEndPosition, route);
+  qDebug() << "Route computation tooks " << timer.elapsed() << "ms";
+  emit routeComputationFinished(routerParams, requester, id, res, route);
+}
+
+bool DBThread::CalculateRoute(const QString& databasePath,
                               const osmscout::RoutingProfile& routingProfile,
                               const osmscout::RoutePosition& start,
-                              const osmscout::RoutePosition target,
+                              const osmscout::RoutePosition& target,
                               osmscout::RouteData& route)
 {
   QMutexLocker locker(&mutex);
