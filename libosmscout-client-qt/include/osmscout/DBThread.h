@@ -47,6 +47,23 @@
 /**
  * \ingroup QtAPI
  */
+struct RouteComputeRequest
+{
+    LocationEntry *routeStart;
+    LocationEntry *routeEnd;
+    osmscout::RoutePosition routeStartPosition;
+    osmscout::RoutePosition routeEndPosition;
+    osmscout::Vehicle vehicle;
+    osmscout::RoutingProfileRef profile;
+    QString databasePath;
+};
+
+Q_DECLARE_METATYPE(RouteComputeRequest)
+    
+
+/**
+ * \ingroup QtAPI
+ */
 struct RenderMapRequest
 {
   osmscout::GeoCoord      coord;
@@ -242,6 +259,12 @@ signals:
 
   void searchFinished(const QString searchPattern, bool error);
 
+  void routeComputationFinished(const RouteComputeRequest&,
+                                QObject *requester,
+                                unsigned int id,
+                                bool rest,
+                                const osmscout::RouteData &route);
+
 public slots:
   void ToggleDaylight();
   void ReloadStyle(const QString &suffix="");
@@ -284,6 +307,26 @@ public slots:
    * @param limit - suggested limit for count of retrieved entries from one database
    */
   void SearchForLocations(const QString searchPattern, int limit);
+
+  /**
+   * Start Route computation. DBThread emits routeResults and
+   * routeComputationFinished signals. 
+   *
+   * User of this function should use Qt::QueuedConnection for invoking
+   * this slot, search may generate IO load and may tooks long time.
+   * 
+   * Route computation can be long depending on the complexity of the route (the
+   * further away the endpoints, the more difficult the routing). 
+   * 
+   * @param databasePath - path of the database containing the data necessary to
+   * route (single tile only!)
+   * @param routingProfile - the profile which must be used to route
+   * @param start - starting position for route computation
+   * @param target - end position for route computation
+   */
+  void onRequestRouteComputation (const RouteComputeRequest&,
+                      QObject *requester,
+                      unsigned int id);
   
 protected:
   MapManagerRef                 mapManager;
@@ -367,10 +410,10 @@ public:
   virtual bool RenderMap(QPainter& painter,
                          const RenderMapRequest& request) = 0;
   
-  bool CalculateRoute(const QString databasePath,
+  bool CalculateRoute(const QString& databasePath,
                       const osmscout::RoutingProfile& routingProfile,
                       const osmscout::RoutePosition& start,
-                      const osmscout::RoutePosition target,
+                      const osmscout::RoutePosition& target,
                       osmscout::RouteData& route);
 
   bool TransformRouteDataToRouteDescription(const QString databasePath,
