@@ -415,7 +415,7 @@ osmscout::WayRef RoutingListModel::getWay()
   return std::make_shared<osmscout::Way>(routeWay);
 }
 void RoutingListModel::setStartAndTarget(LocationEntry* start,
-    LocationEntry* target)
+    LocationEntry* target, bool async)
 {
   std::cout << "Routing from '" << start->getLabel().toLocal8Bit().data() << "' to '" << target->getLabel().toLocal8Bit().data() << "'" << std::endl;
 
@@ -495,7 +495,15 @@ void RoutingListModel::setStartAndTarget(LocationEntry* start,
   computing = true;
   emit computingChanged();
   qDebug() << "Sending signal";
-  emit requestRouteComputation(routerParams,this,++routeRequestId);
+  if (async) {
+      emit requestRouteComputation(routerParams,this,++routeRequestId);
+      return;
+  } else {
+      osmscout::RouteData route;
+      bool routeFound = DBThread::GetInstance()->CalculateRoute(routerParams.databasePath,
+              routingProfile, startPosition, targetPosition, route);
+      onRouteComputationFinished(routerParams,this,routeRequestId,routeFound,route);
+  }
 }
 
 void RoutingListModel::onRouteComputationFinished(

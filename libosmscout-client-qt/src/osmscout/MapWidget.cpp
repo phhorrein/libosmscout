@@ -307,7 +307,7 @@ void MapWidget::paint(QPainter *painter)
         }
     }
 
-    // render ways
+    // render ways 
     if (!ways.isEmpty()) {
         osmscout::MercatorProjection projection = getProjection();
         painter->setBrush(QBrush());
