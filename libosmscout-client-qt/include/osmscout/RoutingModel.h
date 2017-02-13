@@ -96,7 +96,8 @@ class OSMSCOUT_CLIENT_QT_API RoutingListModel : public QAbstractListModel
 
 public slots:
     void setStartAndTarget(LocationEntry* start,
-                           LocationEntry* target);
+                           LocationEntry* target,
+                           bool async = false);
     void clear();
 
     osmscout::WayRef getWay();
